@@ -1,5 +1,7 @@
-`cloudi_service_oauth1`: OAuth v1.0 support as a CloudI service
-===============================================================
+`cloudi_service_oauth1`
+=======================
+
+OAuth v1.0 support as a CloudI service
 
 Build
 -----
