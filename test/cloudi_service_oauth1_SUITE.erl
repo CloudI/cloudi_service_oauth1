@@ -22,8 +22,9 @@
          end_per_testcase/2]).
 
 %% test callbacks
--export([t_debug_without_db_1/1,
-         t_debug_without_db_2/1]).
+-export([t_example_without_db_1/1,
+         t_example_without_db_2/1,
+         t_example_with_db_1/1]).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("cloudi_core/include/cloudi_logger.hrl").
@@ -64,12 +65,15 @@ cloudi_service_terminate(_, _) ->
 %%%------------------------------------------------------------------------
 
 all() ->
-    [{group, debug_with_no_db}].
+    [{group, example_without_db},
+     {group, example_with_db}].
 
 groups() ->
-    [{debug_with_no_db, [],
-      [t_debug_without_db_1,
-       t_debug_without_db_2]}].
+    [{example_without_db, [],
+      [t_example_without_db_1,
+       t_example_without_db_2]},
+     {example_with_db, [],
+      [t_example_with_db_1]}].
 
 suite() ->
     [{ct_hooks, [cth_surefire]},
@@ -92,7 +96,7 @@ init_per_group(_GroupName, Config) ->
 end_per_group(_GroupName, Config) ->
     Config.
 
-init_per_testcase(t_debug_without_db_1, Config) ->
+init_per_testcase(t_example_without_db_1, Config) ->
     {ok, ServiceIds} = cloudi_service_api:services_add([
         {internal,
             "/oauth_db/",
@@ -126,7 +130,7 @@ init_per_testcase(t_debug_without_db_1, Config) ->
             5000, 5000, 5000, undefined, undefined, 1, 5, 300, []}
         ], infinity),
     [{service_ids, ServiceIds} | Config];
-init_per_testcase(t_debug_without_db_2, Config) ->
+init_per_testcase(t_example_without_db_2, Config) ->
     {ok, ServiceIds} = cloudi_service_api:services_add([
         {internal,
             "/oauth_db/",
@@ -159,6 +163,43 @@ init_per_testcase(t_debug_without_db_2, Config) ->
             immediate_closest,
             5000, 5000, 5000, undefined, undefined, 1, 5, 300, []}
         ], infinity),
+    [{service_ids, ServiceIds} | Config];
+init_per_testcase(t_example_with_db_1, Config) ->
+    {ok, ServiceIds} = cloudi_service_api:services_add([
+        {internal,
+            "/oauth_db/",
+            cloudi_service_db_pgsql,
+            [{driver, semiocast}, % semiocast | wg
+             {output, internal},
+             {internal_interface, common},
+             {hostname, "127.0.0.1"},
+             {port, 5432},
+             {username, "cloudi_tests"},
+             {password, "cloudi_tests"},
+             {database, "cloudi_tests"},
+             {timeout, 30000}, % milliseconds
+             {debug, true}],
+            none,
+            5000, 5000, 5000, undefined, undefined, 1, 5, 300, []},
+        {internal,
+            "/",
+            ?MODULE,
+            [{mode, example}],
+            immediate_closest,
+            5000, 5000, 5000, undefined, undefined, 1, 5, 300, []},
+        {internal,
+            "/",
+            cloudi_service_oauth1,
+            [{database_type, pgsql},
+             {database, "/oauth_db/cloudi_tests"},
+             {url_host, "https://photos.example.net"},
+             {tokens_clean, 1},
+             {token_request_expiration, 1},
+             {token_access_expiration, 1},
+             {debug_db, true}],
+            immediate_closest,
+            5000, 5000, 5000, undefined, undefined, 1, 5, 300, []}
+        ], infinity),
     [{service_ids, ServiceIds} | Config].
 
 end_per_testcase(_TestCase, Config) ->
@@ -170,7 +211,7 @@ end_per_testcase(_TestCase, Config) ->
 %%% test cases
 %%%------------------------------------------------------------------------
 
-t_debug_without_db_1(_Config) ->
+t_example_without_db_1(_Config) ->
     % OAuth requests based on http://tools.ietf.org/html/rfc5849#section-1.2
     Context = cloudi:new(),
 
@@ -271,7 +312,7 @@ t_debug_without_db_1(_Config) ->
                                                       undefined, undefined),
     ok.
 
-t_debug_without_db_2(_Config) ->
+t_example_without_db_2(_Config) ->
     % OAuth requests based on http://tools.ietf.org/html/rfc5849#section-1.2
     Context = cloudi:new(),
 
@@ -308,7 +349,200 @@ t_debug_without_db_2(_Config) ->
                                                       undefined, undefined),
     ok.
 
+t_example_with_db_1(_Config) ->
+    % OAuth requests based on http://tools.ietf.org/html/rfc5849#section-1.2
+    Context = cloudi:new(),
+
+    Consumer = {"dpf43f3p2l4k3l03", "kd94hf93k423kf44", hmac_sha1},
+
+    % (HTTPS from http://tools.ietf.org/html/rfc5849#section-1.2 #1)
+    % POST /initiate HTTP/1.1
+    % Host: photos.example.net
+    % Authorization: OAuth realm="Photos",
+    %    oauth_consumer_key="dpf43f3p2l4k3l03",
+    %    oauth_signature_method="HMAC-SHA1",
+    %    oauth_timestamp="137131200",
+    %    oauth_nonce="wIjqoS",
+    %    oauth_callback="http%3A%2F%2Fprinter.example.com%2Fready",
+    %    oauth_signature="74KNZJeDHnMBp0EMJ9ZHt%2FXKycU%3D"
+    Name1 = "/initiate/post",
+    RequestInfo1 = [
+        {<<"url-path">>, <<"/initiate">>}, % <- from cloudi_service_http_cowboy
+        {<<"host">>, <<"photos.example.net">>},
+        {<<"authorization">>,
+         <<"OAuth realm=\"Photos\","
+               "oauth_consumer_key=\"dpf43f3p2l4k3l03\","
+               "oauth_signature_method=\"HMAC-SHA1\","
+               "oauth_timestamp=\"137131200\","
+               "oauth_nonce=\"wIjqoS\","
+               "oauth_callback=\"http%3A%2F%2Fprinter.example.com%2Fready\","
+               "oauth_signature=\"74KNZJeDHnMBp0EMJ9ZHt%2FXKycU%3D\"">>}],
+    Request1 = <<>>,
+
+    % HTTP/1.1 200 OK
+    % Content-Type: application/x-www-form-urlencoded
+    %
+    % oauth_token=hh5s93j4hdidpola&oauth_token_secret=hdhd0244k9j7ao03&
+    % oauth_callback_confirmed=true
+    ResponseInfo1 = [
+        {<<"content-type">>, <<"application/x-www-form-urlencoded">>}],
+    {ok, ResponseInfo1, Response1} = cloudi:send_sync(Context, Name1,
+                                                      RequestInfo1, Request1,
+                                                      undefined, undefined),
+    [TokenRequest, TokenRequestSecret] = token_data(Response1),
+
+    % (HTTPS from http://tools.ietf.org/html/rfc5849#section-1.2 #2)
+    % https://photos.example.net/authorize?oauth_token=hh5s93j4hdidpola
+    Name2 = "/authorize/get",
+    RequestInfo2 = [
+        {<<"url-path">>, <<"/authorize">>}, % <- from cloudi_service_http_cowboy
+        {<<"host">>, <<"photos.example.net">>}],
+    Request2 = <<(<<"oauth_token=">>)/binary, TokenRequest/binary>>,
+
+    % http://printer.example.com/ready?
+    % oauth_token=hh5s93j4hdidpola&oauth_verifier=hfdp7dh39dks9884
+    Response2 = <<>>,
+    {ok, ResponseInfo2, Response2} = cloudi:send_sync(Context, Name2,
+                                                      RequestInfo2, Request2,
+                                                      undefined, undefined),
+    [{<<"status">>, <<"302">>},
+     {<<"location">>, AuthorizeLocation}] = ResponseInfo2,
+    Verifier = location_verifier(AuthorizeLocation,
+                                 <<"http://printer.example.com/ready">>,
+                                 TokenRequest),
+
+    Signature3 = erlang:list_to_binary(cloudi_service_oauth1_data:signature(
+        "POST", "https://photos.example.net/token",
+        [{"oauth_consumer_key", "dpf43f3p2l4k3l03"},
+         {"oauth_token", erlang:binary_to_list(TokenRequest)},
+         {"oauth_signature_method", "HMAC-SHA1"},
+         {"oauth_timestamp", "137131201"},
+         {"oauth_nonce", "walatlh"},
+         {"oauth_verifier", erlang:binary_to_list(Verifier)}],
+        Consumer, erlang:binary_to_list(TokenRequestSecret))),
+    ?LOG_INFO("token (signature=~s,token_request=~s,token_request_secret=~s,"
+              "verifier=~s)",
+              [Signature3, TokenRequest, TokenRequestSecret, Verifier]),
+
+    % (HTTPS from http://tools.ietf.org/html/rfc5849#section-1.2 #3)
+    % POST /token HTTP/1.1
+    % Host: photos.example.net
+    % Authorization: OAuth realm="Photos",
+    %    oauth_consumer_key="dpf43f3p2l4k3l03",
+    %    oauth_token="hh5s93j4hdidpola",
+    %    oauth_signature_method="HMAC-SHA1",
+    %    oauth_timestamp="137131201",
+    %    oauth_nonce="walatlh",
+    %    oauth_verifier="hfdp7dh39dks9884",
+    %    oauth_signature="gKgrFCywp7rO0OXSjdot%2FIHF7IU%3D"
+    Name3 = "/token/post",
+    RequestInfo3 = [
+        {<<"url-path">>, <<"/token">>}, % <- from cloudi_service_http_cowboy
+        {<<"host">>, <<"photos.example.net">>},
+        {<<"authorization">>,
+         <<(<<"OAuth realm=\"Photos\","
+               "oauth_consumer_key=\"dpf43f3p2l4k3l03\","
+               "oauth_token=\"">>)/binary, TokenRequest/binary, (<<"\","
+               "oauth_signature_method=\"HMAC-SHA1\","
+               "oauth_timestamp=\"137131201\","
+               "oauth_nonce=\"walatlh\","
+               "oauth_verifier=\"">>)/binary, Verifier/binary, (<<"\","
+               "oauth_signature=\"">>)/binary, Signature3/binary, (<<"\""
+              "">>)/binary>>}],
+    Request3 = <<>>,
+
+    % HTTP/1.1 200 OK
+    % Content-Type: application/x-www-form-urlencoded
+    %
+    % oauth_token=nnch734d00sl2jdk&oauth_token_secret=pfkkdhi9sl3r4s00
+    ResponseInfo3 = [
+        {<<"content-type">>, <<"application/x-www-form-urlencoded">>}],
+    {ok, ResponseInfo3, Response3} = cloudi:send_sync(Context, Name3,
+                                                      RequestInfo3, Request3,
+                                                      undefined, undefined),
+    [TokenAccess, TokenAccessSecret] = token_data(Response3),
+
+    Signature4 = erlang:list_to_binary(cloudi_service_oauth1_data:signature(
+        "GET",
+        "https://photos.example.net/verify/photos"
+        "?file=vacation.jpg&size=original",
+        [{"file", "vacation.jpg"},
+         {"size", "original"},
+         {"oauth_consumer_key", "dpf43f3p2l4k3l03"},
+         {"oauth_token", erlang:binary_to_list(TokenAccess)},
+         {"oauth_signature_method", "HMAC-SHA1"},
+         {"oauth_timestamp", "137131202"},
+         {"oauth_nonce", "chapoH"}],
+        Consumer, erlang:binary_to_list(TokenAccessSecret))),
+    ?LOG_INFO("verify* (signature=~s,token_access=~s,token_access_secret=~s)",
+              [Signature4, TokenAccess, TokenAccessSecret]),
+
+    % (HTTPS instead of HTTP
+    %  from http://tools.ietf.org/html/rfc5849#section-1.2 #4)
+    % GET /photos?file=vacation.jpg&size=original HTTP/1.1
+    % Host: photos.example.net
+    % Authorization: OAuth realm="Photos",
+    %    oauth_consumer_key="dpf43f3p2l4k3l03",
+    %    oauth_token="nnch734d00sl2jdk",
+    %    oauth_signature_method="HMAC-SHA1",
+    %    oauth_timestamp="137131202",
+    %    oauth_nonce="chapoH",
+    %    oauth_signature="MdpQcU8iPSUjWoN%2FUDMsK2sui9I%3D"
+    Name4 = "/verify/photos/get",
+    RequestInfo4 = [
+        {<<"url-path">>,
+         <<"/verify/photos">>}, % <- from cloudi_service_http_cowboy
+        {<<"host">>, <<"photos.example.net">>},
+        {<<"authorization">>,
+         <<(<<"OAuth realm=\"Photos\","
+               "oauth_consumer_key=\"dpf43f3p2l4k3l03\","
+               "oauth_token=\"">>)/binary, TokenAccess/binary, (<<"\","
+               "oauth_signature_method=\"HMAC-SHA1\","
+               "oauth_timestamp=\"137131202\","
+               "oauth_nonce=\"chapoH\","
+               "oauth_signature=\"">>)/binary, Signature4/binary, (<<"\""
+              "">>)/binary>>}],
+    Request4 = <<"file=vacation.jpg&size=original">>,
+    ResponseInfo4 = [
+        {<<"content-type">>, <<"image/jpeg">>},
+        {<<"content-disposition">>,
+         <<"attachment; filename=\"vacation.jpg\"">>}],
+    Response4 = <<"PHOTO_DATA">>,
+    {ok, ResponseInfo4, Response4} = cloudi:send_sync(Context, Name4,
+                                                      RequestInfo4, Request4,
+                                                      undefined, undefined),
+
+    timer:sleep(2000), % wait for the access token to expire
+    ResponseInfo5 = [{<<"status">>,<<"401">>},
+                     {<<"www-authenticate">>,<<"OAuth">>}],
+    Response5 = <<>>,
+    {ok, ResponseInfo5, Response5} = cloudi:send_sync(Context, Name4,
+                                                      RequestInfo4, Request4,
+                                                      undefined, undefined),
+    ok.
+
 %%%------------------------------------------------------------------------
 %%% Private functions
 %%%------------------------------------------------------------------------
 
+token_data(Response) ->
+    [TokenString, TokenSecretString |
+     Rest] = binary:split(Response, <<"&">>, [global]),
+    case Rest of
+        [] ->
+            ok;
+        [<<"oauth_callback_confirmed=true">>] ->
+            ok
+    end,
+    [<<"oauth_token">>,
+     Token] = binary:split(TokenString, <<"=">>),
+    [<<"oauth_token_secret">>,
+     TokenSecret] = binary:split(TokenSecretString, <<"=">>),
+    [Token, TokenSecret].
+
+location_verifier(Location, Callback, TokenRequest) ->
+    CallbackString = erlang:iolist_to_binary([Callback, "?oauth_token=",
+                                              TokenRequest]),
+    [CallbackString, VerifierString] = binary:split(Location, <<"&">>),
+    [<<"oauth_verifier">>, Verifier] = binary:split(VerifierString, <<"=">>),
+    Verifier.

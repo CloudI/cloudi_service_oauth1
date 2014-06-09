@@ -425,9 +425,9 @@ pgsql_token_request_store(Dispatcher, Database,
                 "timestamp, nonce_request, "
                 "token_request, token_request_secret, "
                 "callback_url, callback_qs, verifier, expiration) "
-               "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, null, "
+               "VALUES (lower($1), $2, $3, $4, $5, $6, $7, $8, $9, $10, null, "
                        "CURRENT_TIMESTAMP + "
-                       "INTERVAL '$11 day' + INTERVAL '$12 second')">>,
+                       "($11 || ' 0:0:' || $12)::INTERVAL)">>,
     case cloudi_service_db_pgsql:equery(Dispatcher, Database, Insert,
                                         [Realm, ConsumerKey,
                                          SignatureMethod, ClientSharedSecret,
@@ -527,9 +527,9 @@ pgsql_token_access_store(Dispatcher, Database,
                "(realm, consumer_key, signature_method, client_shared_secret, "
                 "timestamp, nonce_request, nonce_access, "
                 "token_access, token_access_secret, expiration) "
-               "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, "
+               "VALUES (lower($1), $2, $3, $4, $5, $6, $7, $8, $9, "
                        "CURRENT_TIMESTAMP + "
-                       "INTERVAL '$10 day' + INTERVAL '$11 second')">>,
+                       "($10 || ' 0:0:' || $11)::INTERVAL)">>,
     case cloudi_service_db_pgsql:equery(Dispatcher, Database, Insert,
                                         [Realm, ConsumerKey,
                                          SignatureMethod, ClientSharedSecret,

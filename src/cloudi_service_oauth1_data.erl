@@ -39,7 +39,8 @@
 -author('mail [at] tfletcher (dot) com').
 
 %% external interface
--export([verify/6]).
+-export([verify/6,
+         signature/5]).
 
 -include_lib("public_key/include/public_key.hrl").
 
@@ -62,8 +63,20 @@ verify(Signature, HttpMethod, URL, Params,
        {_, _, rsa_sha1} = Consumer, _TokenSecret) ->
     rsa_sha1_verify(Signature, HttpMethod, URL, Params, Consumer).
 
+-spec signature(HttpMethod :: string(),
+                URL :: string(),
+                Params :: list({string(), string()}),
+                Consumer :: {string(), string(), hmac_sha1},
+                TokenSecret :: string()) ->
+    string().
+
+signature(HttpMethod, URL, Params,
+          {_, _, hmac_sha1} = Consumer, TokenSecret) ->
+    BaseString = signature_base_string(HttpMethod, URL, Params),
+    uri_encode(hmac_sha1_signature(BaseString, Consumer, TokenSecret)).
+
 %%%------------------------------------------------------------------------
-%%% From oauth, in oauth.erl
+%%% From erlang-oauth repository, in oauth.erl
 %%%------------------------------------------------------------------------
 
 plaintext_signature({_, ConsumerSecret, _}, TokenSecret) ->

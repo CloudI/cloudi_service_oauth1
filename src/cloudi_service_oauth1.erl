@@ -80,6 +80,9 @@
 -define(DEFAULT_TOKEN_ACCESS_SECRET_LENGTH,  12). % characters minimum
 -define(DEFAULT_TOKEN_ACCESS_EXPIRATION,     300). % seconds
 -define(DEFAULT_VERIFIER_LENGTH,        12).      % characters minimum
+-define(DEFAULT_DEBUG_DB,               false). % see below:
+        % debug db data with consumer key from
+        % http://tools.ietf.org/html/rfc5849#section-1.2
 -define(DEFAULT_DEBUG,                  false). % see below:
         % debug with http://tools.ietf.org/html/rfc5849#section-1.2
 
@@ -96,6 +99,7 @@
         token_access_secret_bytes :: pos_integer(),
         token_access_expiration :: pos_integer(),
         verifier_bytes :: pos_integer(),
+        debug_db :: boolean(),
         debug :: boolean(),
         prefix_length :: pos_integer()
     }).
@@ -121,11 +125,13 @@ cloudi_service_init(Args, Prefix, Dispatcher) ->
         {token_access_secret_length,  ?DEFAULT_TOKEN_ACCESS_SECRET_LENGTH},
         {token_access_expiration,     ?DEFAULT_TOKEN_ACCESS_EXPIRATION},
         {verifier_length,             ?DEFAULT_VERIFIER_LENGTH},
+        {debug_db,                    ?DEFAULT_DEBUG_DB},
         {debug,                       ?DEFAULT_DEBUG}],
     [DatabaseType, Database, URLHost, TokensClean,
      TokenRequestLength, TokenRequestSecretLength, TokenRequestExpiration,
      TokenAccessLength, TokenAccessSecretLength, TokenAccessExpiration,
-     VerifierLength, Debug] = cloudi_proplists:take_values(Defaults, Args),
+     VerifierLength, DebugDB0, Debug
+     ] = cloudi_proplists:take_values(Defaults, Args),
     cloudi_service:self(Dispatcher) ! initialize, % db initialize
     DatabaseModule = if
         DatabaseType =:= pgsql ->
@@ -161,7 +167,13 @@ cloudi_service_init(Args, Prefix, Dispatcher) ->
             (TokenAccessExpiration > 0)),
     true = (is_integer(VerifierLength) andalso
             (VerifierLength > 0)),
-    true = is_boolean(Debug),
+    DebugDB1 = if
+        Debug =:= true ->
+            true;
+        Debug =:= false ->
+            true = is_boolean(DebugDB0),
+            DebugDB0
+    end,
     % endpoints based on http://tools.ietf.org/html/rfc5849#section-1.2
     ok = cloudi_service:subscribe(Dispatcher, "initiate/post"),
     ok = cloudi_service:subscribe(Dispatcher, "authorize/get"),
@@ -186,6 +198,7 @@ cloudi_service_init(Args, Prefix, Dispatcher) ->
                 token_access_expiration = TokenAccessExpiration,
                 verifier_bytes =
                     token_length_to_bytes(VerifierLength),
+                debug_db = DebugDB1,
                 debug = Debug,
                 prefix_length = erlang:length(Prefix)}}.
 
@@ -201,8 +214,8 @@ cloudi_service_handle_request(_Type, Name, Pattern, RequestInfo, Request,
 cloudi_service_handle_info(initialize,
                            #state{database_module = DatabaseModule,
                                   database = Database,
-                                  debug = Debug} = State, Dispatcher) ->
-    ok = DatabaseModule:initialize(Dispatcher, Database, Debug),
+                                  debug_db = DebugDB} = State, Dispatcher) ->
+    ok = DatabaseModule:initialize(Dispatcher, Database, DebugDB),
     {noreply, State};
 cloudi_service_handle_info({tokens_clean, TokensClean} = Request,
                            #state{database_module = DatabaseModule,
@@ -589,6 +602,8 @@ request_initiate(Method, URL, Params, Timeout,
                                [Realm, ConsumerKey, Reason]),
                     response_error(400, [], State)
             end;
+        {error, nonce_exists} ->
+            response_error_authorization_type(State);
         {error, _} ->
             % missing parameters
             response_error(400, [], State)
@@ -858,6 +873,8 @@ request_token(Method, URL, Params, Timeout,
                 false ->
                     response_error_authorization_type(State)
             end;
+        {error, not_found} ->
+            response_error_authorization_type(State);
         {error, _} ->
             % missing parameters
             response_error(400, [], State)
@@ -985,6 +1002,8 @@ request_delete(Method, URL, Params, Timeout,
                 false ->
                     response_error_authorization_type(State)
             end;
+        {error, not_found} ->
+            response_error_authorization_type(State);
         {error, _} ->
             % missing parameters
             response_error(400, [], State)
@@ -1014,6 +1033,8 @@ request_access(Method, URL, Params, NextName, RequestHeaders, Request, Timeout,
                 false ->
                     response_error_authorization_type(State)
             end;
+        {error, not_found} ->
+            response_error_authorization_type(State);
         {error, _} ->
             % missing parameters
             response_error(400, [], State)
