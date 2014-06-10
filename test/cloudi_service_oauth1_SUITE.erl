@@ -29,6 +29,9 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("cloudi_core/include/cloudi_logger.hrl").
 
+-define(DEFAULT_PGSQL_HOST, "127.0.0.1").
+-define(DEFAULT_PGSQL_PORT, 5432).
+
 %%%------------------------------------------------------------------------
 %%% Callback functions from cloudi_service
 %%%------------------------------------------------------------------------
@@ -65,8 +68,8 @@ cloudi_service_terminate(_, _) ->
 %%%------------------------------------------------------------------------
 
 all() ->
-    [{group, example_without_db},
-     {group, example_with_db}].
+    test_condition([{group, example_without_db},
+                    {group, example_with_db}]).
 
 groups() ->
     [{example_without_db, [],
@@ -543,3 +546,20 @@ location_verifier(Location, Callback, TokenRequest) ->
     [CallbackString,
      <<"oauth_verifier=", Verifier/binary>>] = binary:split(Location, <<"&">>),
     Verifier.
+
+test_condition(L) ->
+    case gen_tcp:connect(?DEFAULT_PGSQL_HOST, ?DEFAULT_PGSQL_PORT, []) of
+        {ok, Socket} ->
+            catch gen_tcp:close(Socket),
+            L;
+        {error, econnrefused} ->
+            error_logger:error_msg("unable to test ~p",
+                                   [{?DEFAULT_PGSQL_HOST,
+                                     ?DEFAULT_PGSQL_PORT}]),
+            {skip, pgsql_dead};
+        {error, Reason} ->
+            error_logger:error_msg("unable to test ~p: ~p",
+                                   [{?DEFAULT_PGSQL_HOST,
+                                     ?DEFAULT_PGSQL_PORT}, Reason]),
+            {skip, pgsql_dead}
+    end.
