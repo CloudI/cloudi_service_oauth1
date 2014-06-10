@@ -526,7 +526,8 @@ t_example_with_db_1(_Config) ->
 %%%------------------------------------------------------------------------
 
 token_data(Response) ->
-    [TokenString, TokenSecretString |
+    [<<"oauth_token=", Token/binary>>,
+     <<"oauth_token_secret=", TokenSecret/binary>> |
      Rest] = binary:split(Response, <<"&">>, [global]),
     case Rest of
         [] ->
@@ -534,15 +535,11 @@ token_data(Response) ->
         [<<"oauth_callback_confirmed=true">>] ->
             ok
     end,
-    [<<"oauth_token">>,
-     Token] = binary:split(TokenString, <<"=">>),
-    [<<"oauth_token_secret">>,
-     TokenSecret] = binary:split(TokenSecretString, <<"=">>),
     [Token, TokenSecret].
 
 location_verifier(Location, Callback, TokenRequest) ->
     CallbackString = erlang:iolist_to_binary([Callback, "?oauth_token=",
                                               TokenRequest]),
-    [CallbackString, VerifierString] = binary:split(Location, <<"&">>),
-    [<<"oauth_verifier">>, Verifier] = binary:split(VerifierString, <<"=">>),
+    [CallbackString,
+     <<"oauth_verifier=", Verifier/binary>>] = binary:split(Location, <<"&">>),
     Verifier.

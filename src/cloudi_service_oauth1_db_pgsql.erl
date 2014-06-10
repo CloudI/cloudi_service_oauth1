@@ -66,7 +66,9 @@
 -define(PGSQL_TABLE_CONFIGURATION, "oauth_configuration").
 -define(PGSQL_TABLE_TOKEN_REQUEST, "oauth_token_request").
 -define(PGSQL_TABLE_TOKEN_ACCESS, "oauth_token_access").
--define(SECONDS_IN_DAY, (24 * 60 * 60)).
+-define(SECONDS_IN_MINUTE, (60)).
+-define(SECONDS_IN_HOUR, (60 * ?SECONDS_IN_MINUTE)).
+-define(SECONDS_IN_DAY, (24 * ?SECONDS_IN_HOUR)).
 
 %%%------------------------------------------------------------------------
 %%% External interface functions
@@ -422,25 +424,21 @@ pgsql_token_request_store(Dispatcher, Database,
                           Timestamp, NonceRequest,
                           TokenRequest, TokenRequestSecret,
                           CallbackURL, CallbackQS,
-                          ExpirationSeconds0, Timeout) ->
-    ExpirationDays = ExpirationSeconds0 div ?SECONDS_IN_DAY,
-    ExpirationSeconds1 = ExpirationSeconds0 -
-                         (?SECONDS_IN_DAY * ExpirationDays),
+                          ExpirationSeconds, Timeout) ->
     Insert = <<"INSERT INTO " ?PGSQL_TABLE_TOKEN_REQUEST " "
                "(realm, consumer_key, signature_method, client_shared_secret, "
                 "timestamp, nonce_request, "
                 "token_request, token_request_secret, "
                 "callback_url, callback_qs, verifier, expiration) "
                "VALUES (lower($1), $2, $3, $4, $5, $6, $7, $8, $9, $10, null, "
-                       "CURRENT_TIMESTAMP + "
-                       "($11 || ' 0:0:' || $12)::INTERVAL)">>,
+                       "CURRENT_TIMESTAMP + ($11)::INTERVAL)">>,
     case cloudi_service_db_pgsql:equery(Dispatcher, Database, Insert,
                                         [Realm, ConsumerKey,
                                          SignatureMethod, ClientSharedSecret,
                                          Timestamp, NonceRequest,
                                          TokenRequest, TokenRequestSecret,
                                          CallbackURL, CallbackQS,
-                                         ExpirationDays, ExpirationSeconds1],
+                                         pgsql_interval(ExpirationSeconds)],
                                         Timeout) of
         {ok, {updated, 1}} ->
             ok;
@@ -525,23 +523,19 @@ pgsql_token_access_store(Dispatcher, Database,
                          SignatureMethod, ClientSharedSecret,
                          Timestamp, NonceRequest, NonceAccess,
                          TokenAccess, TokenAccessSecret,
-                         ExpirationSeconds0, Timeout) ->
-    ExpirationDays = ExpirationSeconds0 div ?SECONDS_IN_DAY,
-    ExpirationSeconds1 = ExpirationSeconds0 -
-                         (?SECONDS_IN_DAY * ExpirationDays),
+                         ExpirationSeconds, Timeout) ->
     Insert = <<"INSERT INTO " ?PGSQL_TABLE_TOKEN_ACCESS " "
                "(realm, consumer_key, signature_method, client_shared_secret, "
                 "timestamp, nonce_request, nonce_access, "
                 "token_access, token_access_secret, expiration) "
                "VALUES (lower($1), $2, $3, $4, $5, $6, $7, $8, $9, "
-                       "CURRENT_TIMESTAMP + "
-                       "($10 || ' 0:0:' || $11)::INTERVAL)">>,
+                       "CURRENT_TIMESTAMP + ($10)::INTERVAL)">>,
     case cloudi_service_db_pgsql:equery(Dispatcher, Database, Insert,
                                         [Realm, ConsumerKey,
                                          SignatureMethod, ClientSharedSecret,
                                          Timestamp, NonceRequest, NonceAccess,
                                          TokenAccess, TokenAccessSecret,
-                                         ExpirationDays, ExpirationSeconds1],
+                                         pgsql_interval(ExpirationSeconds)],
                                         Timeout) of
         {ok, {updated, 1}} ->
             ok;
@@ -574,3 +568,12 @@ pgsql_token_access_verify(Dispatcher, Database,
             Error % database driver error
     end.
 
+pgsql_interval(Seconds0) ->
+    Days = Seconds0 div ?SECONDS_IN_DAY,
+    Seconds1 = Seconds0 - (?SECONDS_IN_DAY * Days),
+    Hours = Seconds1 div ?SECONDS_IN_HOUR,
+    Seconds2 = Seconds1 - (?SECONDS_IN_HOUR * Hours),
+    Minutes = Seconds2 div ?SECONDS_IN_MINUTE,
+    SecondsN = Seconds2 - (?SECONDS_IN_MINUTE * Minutes),
+    lists:flatten(io_lib:format("~w ~w:~w:~w",
+                                [Days, Hours, Minutes, SecondsN])).
