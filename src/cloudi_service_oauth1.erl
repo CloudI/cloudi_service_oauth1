@@ -83,6 +83,7 @@
 -define(DEFAULT_VERIFY,                 undefined). % see below:
         % either an anonymous function or a {module(), atom()} tuple
         % (to reference a function), i.e.: fun((binary()) -> boolean())
+        % can be provided as {Module, FunctionName}
 -define(DEFAULT_DEBUG_DB,               false). % see below:
         % debug db data with consumer key from
         % http://tools.ietf.org/html/rfc5849#section-1.2
