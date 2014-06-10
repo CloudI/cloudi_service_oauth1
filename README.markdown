@@ -15,6 +15,9 @@ callback URL is set to "`oob`" (i.e., when a callback URL is not used):
 refer to
 [RFC 5849: Section 2.1](http://tools.ietf.org/html/rfc5849#section-2.1).
 
+RFC 5849 is [illustrated here](http://hueniverse.com/oauth/guide/workflow/)
+(as part of the OAuth v1.0 [guide here](http://hueniverse.com/oauth/)).
+
 Build
 -----
 
