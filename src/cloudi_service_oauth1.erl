@@ -517,19 +517,28 @@ request_initiate_store(Realm, ConsumerKey, SignatureMethod,
 request_initiate_verify(Signature, Method, URL, Params,
                         {_, ClientSharedSecret, _} = Consumer,
                         Realm, ConsumerKey,
-                        SignatureMethod, Timestamp, NonceRequest, Timeout,
+                        SignatureMethod, Timestamp, NonceRequest,
+                        CallbackRegex, Timeout,
                         State, Dispatcher) ->
     % from http://tools.ietf.org/html/rfc5849#section-2.1
     % (n.b., http://tools.ietf.org/html/rfc5849#section-3.2)
     case lists:keyfind("oauth_callback", 1, Params) of
         {_, Callback} ->
-            case oauth_verify(Signature, Method, URL, Params, Consumer, "") of
-                true ->
-                    request_initiate_store(Realm, ConsumerKey, SignatureMethod,
-                                           ClientSharedSecret,
-                                           Timestamp, NonceRequest, Callback,
-                                           Timeout, State, Dispatcher);
-                false ->
+            case re:run(Callback, CallbackRegex) of
+                {match, _} ->
+                    case oauth_verify(Signature, Method, URL,
+                                      Params, Consumer, "") of
+                        true ->
+                            request_initiate_store(Realm, ConsumerKey,
+                                                   SignatureMethod,
+                                                   ClientSharedSecret,
+                                                   Timestamp, NonceRequest,
+                                                   Callback, Timeout,
+                                                   State, Dispatcher);
+                        false ->
+                            response_error_authorization_type(State)
+                    end;
+                nomatch ->
                     response_error_authorization_type(State)
             end;
         false ->
@@ -574,7 +583,7 @@ request_initiate(Method, URL, Params, Timeout,
             case DatabaseModule:signature_methods(Dispatcher, Database,
                                                   Realm, ConsumerKey,
                                                   Timeout) of
-                {ok, {_, _, _} = SignatureMethods} ->
+                {ok, {_, _, _} = SignatureMethods, CallbackRegex} ->
                     case signature_method_select(SignatureMethod,
                                                  SignatureMethods) of
                         {ok, {ClientSharedSecret, SignatureMethodType}} ->
@@ -586,7 +595,7 @@ request_initiate(Method, URL, Params, Timeout,
                                                     Realm, ConsumerKey,
                                                     SignatureMethod,
                                                     Timestamp, NonceRequest,
-                                                    Timeout,
+                                                    CallbackRegex, Timeout,
                                                     State, Dispatcher);
                         {error, signature_method_unsupported} ->
                             response_error(400, [], State);
@@ -596,6 +605,8 @@ request_initiate(Method, URL, Params, Timeout,
                                        [Realm, ConsumerKey, Reason]),
                             response_error_authorization_type(State)
                     end;
+                {error, not_found} ->
+                    response_error_authorization_type(State);
                 {error, Reason} ->
                     % unable to get signature methods
                     ?LOG_ERROR("signature methods error (~p, ~p): ~p",

@@ -97,7 +97,7 @@ initialize(Dispatcher, Database, Debug) ->
                         Timeout :: cloudi_service:timeout_milliseconds()) ->
     {ok, {PLAINTEXT :: binary() | null,
           HMAC_SHA1 :: binary() | null,
-          RSA_SHA1 :: binary() | null}} |
+          RSA_SHA1 :: binary() | null}, CallbackRegex :: binary()} |
     {error, any()}.
 
 signature_methods(Dispatcher, Database, Realm, ConsumerKey, Timeout) ->
@@ -266,6 +266,9 @@ pgsql_create_schema(Dispatcher, Database) ->
                     "signature_method_plaintext "  "TEXT NULL,"
                     "signature_method_hmac_sha1 "  "TEXT NULL,"
                     "signature_method_rsa_sha1 "   "TEXT NULL,"
+                    % inferred from
+                    % http://tools.ietf.org/html/rfc5849#section-2.1
+                    "callback_regex "              "TEXT NOT NULL,"
                     "PRIMARY KEY(consumer_key, realm)"
                 ");">>,
               <<"CREATE TABLE " ?PGSQL_TABLE_TOKEN_REQUEST " ("
@@ -336,9 +339,11 @@ pgsql_configuration_rfc5849_test_data(Dispatcher, Database) ->
                %  photos.example.net server)
                <<"INSERT INTO " ?PGSQL_TABLE_CONFIGURATION " "
                  "(consumer_key, realm, signature_method_plaintext, "
-                  "signature_method_hmac_sha1, signature_method_rsa_sha1) "
+                  "signature_method_hmac_sha1, signature_method_rsa_sha1, "
+                  "callback_regex) "
                  "VALUES ('dpf43f3p2l4k3l03', 'photos', NULL, "
-                         "'kd94hf93k423kf44', NULL);">>],
+                         "'kd94hf93k423kf44', NULL, "
+                         "'https?://printer.example.com/ready');">>],
     case cloudi_service_db_pgsql:transaction(Dispatcher, Database, Inserts) of
         {ok, ok} ->
             ok;
@@ -368,15 +373,16 @@ pgsql_tokens_clean(Dispatcher, Database) ->
 pgsql_signature_methods(Dispatcher, Database, Realm, ConsumerKey, Timeout) ->
     Select = <<"SELECT signature_method_plaintext, "
                       "signature_method_hmac_sha1, "
-                      "signature_method_rsa_sha1 "
+                      "signature_method_rsa_sha1, "
+                      "callback_regex "
                "FROM " ?PGSQL_TABLE_CONFIGURATION " "
                "WHERE realm = lower($1) AND consumer_key = $2">>,
     case cloudi_service_db_pgsql:equery(Dispatcher, Database, Select,
                                         [Realm, ConsumerKey], Timeout) of
         {ok, {selected, []}} ->
             {error, not_found};
-        {ok, {selected, [Row]}} ->
-            {ok, Row};
+        {ok, {selected, [{PLAINTEXT, HMAC_SHA1, RSA_SHA1, CallbackRegex}]}} ->
+            {ok, {PLAINTEXT, HMAC_SHA1, RSA_SHA1}, CallbackRegex};
         {ok, {error, _} = Error} ->
             Error; % database error
         {error, _} = Error ->
