@@ -57,7 +57,8 @@ authorization_tokens_param(Data, Fun) ->
                                  Attr == <<"oauth_signature">>;
                                  Attr == <<"oauth_callback">>;
                                  Attr == <<"oauth_nonce">>;
-                                 Attr == <<"oauth_consumer_key">> ->
+                                 Attr == <<"oauth_consumer_key">>;
+                                 Attr == <<"oauth_verifier">> ->
                                     cow_qs:urldecode(Value);
                                  true ->
                                     Value

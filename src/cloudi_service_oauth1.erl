@@ -80,6 +80,9 @@
 -define(DEFAULT_TOKEN_ACCESS_SECRET_LENGTH,  12). % characters minimum
 -define(DEFAULT_TOKEN_ACCESS_EXPIRATION,     300). % seconds
 -define(DEFAULT_VERIFIER_LENGTH,        12).      % characters minimum
+-define(DEFAULT_VERIFY,                 undefined). % see below:
+        % either an anonymous function or a {module(), atom()} tuple
+        % (to reference a function), i.e.: fun((binary()) -> boolean())
 -define(DEFAULT_DEBUG_DB,               false). % see below:
         % debug db data with consumer key from
         % http://tools.ietf.org/html/rfc5849#section-1.2
@@ -99,6 +102,7 @@
         token_access_secret_bytes :: pos_integer(),
         token_access_expiration :: pos_integer(),
         verifier_bytes :: pos_integer(),
+        verify_f :: fun((binary()) -> boolean()) | undefined,
         debug_db :: boolean(),
         debug :: boolean(),
         prefix_length :: pos_integer()
@@ -125,12 +129,13 @@ cloudi_service_init(Args, Prefix, Dispatcher) ->
         {token_access_secret_length,  ?DEFAULT_TOKEN_ACCESS_SECRET_LENGTH},
         {token_access_expiration,     ?DEFAULT_TOKEN_ACCESS_EXPIRATION},
         {verifier_length,             ?DEFAULT_VERIFIER_LENGTH},
+        {verify,                      ?DEFAULT_VERIFY},
         {debug_db,                    ?DEFAULT_DEBUG_DB},
         {debug,                       ?DEFAULT_DEBUG}],
     [DatabaseType, Database, URLHost, TokensClean,
      TokenRequestLength, TokenRequestSecretLength, TokenRequestExpiration,
      TokenAccessLength, TokenAccessSecretLength, TokenAccessExpiration,
-     VerifierLength, DebugDB0, Debug
+     VerifierLength, Verify0, DebugDB0, Debug
      ] = cloudi_proplists:take_values(Defaults, Args),
     cloudi_service:self(Dispatcher) ! initialize, % db initialize
     DatabaseModule = if
@@ -167,6 +172,16 @@ cloudi_service_init(Args, Prefix, Dispatcher) ->
             (TokenAccessExpiration > 0)),
     true = (is_integer(VerifierLength) andalso
             (VerifierLength > 0)),
+    Verify1 = case Verify0 of
+        {VerifyModule, VerifyFunction}
+        when is_atom(VerifyModule), is_atom(VerifyFunction) ->
+            {file, _} = code:is_loaded(VerifyModule),
+            fun(VerifyBinary) -> VerifyModule:VerifyFunction(VerifyBinary) end;
+        _ when is_function(Verify0, 1) ->
+            Verify0;
+        undefined ->
+            undefined
+    end,
     DebugDB1 = if
         Debug =:= true ->
             true;
@@ -198,6 +213,7 @@ cloudi_service_init(Args, Prefix, Dispatcher) ->
                 token_access_expiration = TokenAccessExpiration,
                 verifier_bytes =
                     token_length_to_bytes(VerifierLength),
+                verify_f = Verify1,
                 debug_db = DebugDB1,
                 debug = Debug,
                 prefix_length = erlang:length(Prefix)}}.
@@ -715,34 +731,48 @@ request_authorize(RequestQS, TokenRequest, Timeout,
 token_input_verify(Realm, ConsumerKey, SignatureMethod,
                    Signature, Timestamp, NonceAccess,
                    "hh5s93j4hdidpola" = TokenRequest,
-                   Verifier, Params, _Timeout,
+                   _Verifier, Params, _Timeout,
                    #state{debug = true}, _Dispatcher) ->
     % example from http://tools.ietf.org/html/rfc5849#section-1.2
     {ok, {Realm, ConsumerKey, SignatureMethod,
           "kd94hf93k423kf44", Signature, Timestamp, "wIjqoS", NonceAccess,
-          TokenRequest, "hdhd0244k9j7ao03", Verifier}, Params};
+          TokenRequest, "hdhd0244k9j7ao03"}, Params};
 token_input_verify(Realm, ConsumerKey, SignatureMethod,
                    Signature, Timestamp, NonceAccess,
                    TokenRequest, Verifier, Params, Timeout,
                    #state{database_module = DatabaseModule,
-                          database = Database}, Dispatcher) ->
-    case DatabaseModule:token_request_verify(Dispatcher, Database,
-                                             Realm, ConsumerKey,
-                                             SignatureMethod, Timestamp,
-                                             NonceAccess, TokenRequest,
-                                             Verifier, Timeout) of
-        {ok, ClientSharedSecret, NonceRequest, TokenRequestSecret} ->
-            {ok, {Realm, ConsumerKey, SignatureMethod,
-                  erlang:binary_to_list(ClientSharedSecret),
-                  Signature, Timestamp,
-                  erlang:binary_to_list(NonceRequest), NonceAccess,
-                  TokenRequest,
-                  erlang:binary_to_list(TokenRequestSecret),
-                  Verifier}, Params};
-        {error, Reason} = Error ->
-            ?LOG_ERROR("request token check error (~p, ~p): ~p",
-                       [Realm, ConsumerKey, Reason]),
-            Error
+                          database = Database,
+                          verify_f = VerifyF}, Dispatcher) ->
+    {VerifierPrefix, VerifierSuffix} = verifier_split(Verifier),
+    VerifyResult = if
+        VerifierSuffix =:= undefined ->
+            true;
+        VerifyF =:= undefined ->
+            false;
+        is_list(VerifierSuffix) ->
+            VerifyF(erlang:list_to_binary(VerifierSuffix))
+    end,
+    if
+        VerifyResult =:= true ->
+            case DatabaseModule:token_request_verify(Dispatcher, Database,
+                                                     Realm, ConsumerKey,
+                                                     SignatureMethod, Timestamp,
+                                                     NonceAccess, TokenRequest,
+                                                     VerifierPrefix, Timeout) of
+                {ok, ClientSharedSecret, NonceRequest, TokenRequestSecret} ->
+                    {ok, {Realm, ConsumerKey, SignatureMethod,
+                          erlang:binary_to_list(ClientSharedSecret),
+                          Signature, Timestamp,
+                          erlang:binary_to_list(NonceRequest),
+                          NonceAccess, TokenRequest,
+                          erlang:binary_to_list(TokenRequestSecret)}, Params};
+                {error, Reason} = Error ->
+                    ?LOG_ERROR("request token check error (~p, ~p): ~p",
+                               [Realm, ConsumerKey, Reason]),
+                    Error
+            end;
+        true ->
+            {error, verify_failed}
     end.
 
 token_input_check(Realm, ConsumerKey, "PLAINTEXT" = SignatureMethod,
@@ -863,7 +893,7 @@ request_token(Method, URL, Params, Timeout,
     case token_input(Params, Timeout, State, Dispatcher) of
         {ok, {Realm, ConsumerKey, SignatureMethod, ClientSharedSecret,
               Signature, Timestamp, NonceRequest, NonceAccess,
-              TokenRequest, TokenRequestSecret, _Verifier}, NewParams} ->
+              TokenRequest, TokenRequestSecret}, NewParams} ->
             SignatureMethodType = if
                 SignatureMethod == "PLAINTEXT" ->
                     plaintext;
@@ -885,6 +915,8 @@ request_token(Method, URL, Params, Timeout,
                     response_error_authorization_type(State)
             end;
         {error, not_found} ->
+            response_error_authorization_type(State);
+        {error, verify_failed} ->
             response_error_authorization_type(State);
         {error, _} ->
             % missing parameters
@@ -1129,4 +1161,14 @@ token_access_secret(#state{token_access_secret_bytes = N}) ->
 
 verifier(#state{verifier_bytes = N}) ->
     token(crypto:strong_rand_bytes(N)).
+
+verifier_split([], Prefix) ->
+    {lists:reverse(Prefix), undefined};
+verifier_split([$+ | L], Prefix) ->
+    {lists:reverse(Prefix), L};
+verifier_split([C | L], Prefix) ->
+    verifier_split(L, [C | Prefix]).
+
+verifier_split(L) ->
+    verifier_split(L, []).
 
