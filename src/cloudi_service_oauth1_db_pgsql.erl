@@ -3,7 +3,7 @@
 %%%
 %%%------------------------------------------------------------------------
 %%% @doc
-%%% ==CloudI OAuth v1.0 DB Interface==
+%%% ==CloudI OAuth v1.0 PostgreSQL DB Interface==
 %%% @end
 %%%
 %%% BSD LICENSE
@@ -49,6 +49,7 @@
 
 -module(cloudi_service_oauth1_db_pgsql).
 -author('mjtruog [at] gmail (dot) com').
+-behaviour(cloudi_service_oauth1_db).
 
 %% external interface
 -export([initialize/3,

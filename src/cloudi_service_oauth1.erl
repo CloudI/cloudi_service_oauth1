@@ -141,7 +141,9 @@ cloudi_service_init(Args, Prefix, Dispatcher) ->
     cloudi_service:self(Dispatcher) ! initialize, % db initialize
     DatabaseModule = if
         DatabaseType =:= pgsql ->
-            cloudi_service_oauth1_db_pgsql
+            cloudi_service_oauth1_db_pgsql;
+        DatabaseType =:= riak ->
+            cloudi_service_oauth1_db_riak
     end,
     true = (is_list(Database) andalso is_integer(hd(Database))),
     true = (is_list(URLHost) andalso is_integer(hd(URLHost))),
