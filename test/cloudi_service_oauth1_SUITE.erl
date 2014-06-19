@@ -31,6 +31,8 @@
 
 -define(DEFAULT_PGSQL_HOST, "127.0.0.1").
 -define(DEFAULT_PGSQL_PORT, 5432).
+-define(DEFAULT_RIAK_HOST, "127.0.0.1").
+-define(DEFAULT_RIAK_PORT, 8087).
 
 %%%------------------------------------------------------------------------
 %%% Callback functions from cloudi_service
@@ -68,11 +70,18 @@ cloudi_service_terminate(_, _) ->
 %%%------------------------------------------------------------------------
 
 all() ->
-    test_condition([{group, example_without_db},
-                    {group, example_with_db}]).
+    test_conditions_merge([
+        test_condition_riak([{group, riak}]),
+        test_condition_pgsql([{group, pgsql}])]).
 
 groups() ->
-    [{example_without_db, [],
+    [{pgsql, [],
+      [{group, example_without_db},
+       {group, example_with_db}]},
+     {riak, [],
+      [{group, example_without_db},
+       {group, example_with_db}]},
+     {example_without_db, [],
       [t_example_without_db_1,
        t_example_without_db_2]},
      {example_with_db, [],
@@ -93,6 +102,10 @@ end_per_suite(_Config) ->
 group(_GroupName) ->
     [].
 
+init_per_group(pgsql, Config) ->
+    [{db, pgsql} | lists:keydelete(db, 1, Config)];
+init_per_group(riak, Config) ->
+    [{db, riak} | lists:keydelete(db, 1, Config)];
 init_per_group(_GroupName, Config) ->
     Config.
 
@@ -100,22 +113,9 @@ end_per_group(_GroupName, Config) ->
     Config.
 
 init_per_testcase(t_example_without_db_1, Config) ->
+    DBType = db_type(Config),
     {ok, ServiceIds} = cloudi_service_api:services_add([
-        {internal,
-            "/oauth_db/",
-            cloudi_service_db_pgsql,
-            [{driver, semiocast}, % semiocast | wg
-             {output, internal},
-             {internal_interface, common},
-             {hostname, "127.0.0.1"},
-             {port, 5432},
-             {username, "cloudi_tests"},
-             {password, "cloudi_tests"},
-             {database, "cloudi_tests"},
-             {timeout, 30000}, % milliseconds
-             {debug, true}],
-            none,
-            5000, 5000, 5000, undefined, undefined, 1, 5, 300, []},
+        db_service(DBType),
         {internal,
             "/",
             ?MODULE,
@@ -125,8 +125,8 @@ init_per_testcase(t_example_without_db_1, Config) ->
         {internal,
             "/",
             cloudi_service_oauth1,
-            [{database_type, pgsql},
-             {database, "/oauth_db/cloudi_tests"},
+            [{database_type, DBType},
+             {database, db_service_name(DBType)},
              {url_host, "https://photos.example.net"},
              {debug, true}],
             immediate_closest,
@@ -134,22 +134,9 @@ init_per_testcase(t_example_without_db_1, Config) ->
         ], infinity),
     [{service_ids, ServiceIds} | Config];
 init_per_testcase(t_example_without_db_2, Config) ->
+    DBType = db_type(Config),
     {ok, ServiceIds} = cloudi_service_api:services_add([
-        {internal,
-            "/oauth_db/",
-            cloudi_service_db_pgsql,
-            [{driver, semiocast}, % semiocast | wg
-             {output, internal},
-             {internal_interface, common},
-             {hostname, "127.0.0.1"},
-             {port, 5432},
-             {username, "cloudi_tests"},
-             {password, "cloudi_tests"},
-             {database, "cloudi_tests"},
-             {timeout, 30000}, % milliseconds
-             {debug, true}],
-            none,
-            5000, 5000, 5000, undefined, undefined, 1, 5, 300, []},
+        db_service(DBType),
         {internal,
             "/",
             ?MODULE,
@@ -159,8 +146,8 @@ init_per_testcase(t_example_without_db_2, Config) ->
         {internal,
             "/",
             cloudi_service_oauth1,
-            [{database_type, pgsql},
-             {database, "/oauth_db/cloudi_tests"},
+            [{database_type, DBType},
+             {database, db_service_name(DBType)},
              {url_host, "http://photos.example.net"},
              {debug, true}],
             immediate_closest,
@@ -168,22 +155,9 @@ init_per_testcase(t_example_without_db_2, Config) ->
         ], infinity),
     [{service_ids, ServiceIds} | Config];
 init_per_testcase(t_example_with_db_1, Config) ->
+    DBType = db_type(Config),
     {ok, ServiceIds} = cloudi_service_api:services_add([
-        {internal,
-            "/oauth_db/",
-            cloudi_service_db_pgsql,
-            [{driver, semiocast}, % semiocast | wg
-             {output, internal},
-             {internal_interface, common},
-             {hostname, "127.0.0.1"},
-             {port, 5432},
-             {username, "cloudi_tests"},
-             {password, "cloudi_tests"},
-             {database, "cloudi_tests"},
-             {timeout, 30000}, % milliseconds
-             {debug, true}],
-            none,
-            5000, 5000, 5000, undefined, undefined, 1, 5, 300, []},
+        db_service(DBType),
         {internal,
             "/",
             ?MODULE,
@@ -193,8 +167,8 @@ init_per_testcase(t_example_with_db_1, Config) ->
         {internal,
             "/",
             cloudi_service_oauth1,
-            [{database_type, pgsql},
-             {database, "/oauth_db/cloudi_tests"},
+            [{database_type, DBType},
+             {database, db_service_name(DBType)},
              {url_host, "https://photos.example.net"},
              {tokens_clean, 1},
              {token_request_expiration, 1},
@@ -528,6 +502,39 @@ t_example_with_db_1(_Config) ->
 %%% Private functions
 %%%------------------------------------------------------------------------
 
+db_type(Config) ->
+    {db, DB} = lists:keyfind(db, 1, Config),
+    DB.
+
+db_service_name(pgsql) ->
+    "/oauth_db/cloudi_tests";
+db_service_name(riak) ->
+    "/oauth_db/cloudi_tests/".
+
+db_service(pgsql) ->
+    {internal,
+        "/oauth_db/",
+        cloudi_service_db_pgsql,
+        [{driver, semiocast}, % semiocast | wg
+         {output, internal},
+         {internal_interface, common},
+         {hostname, "127.0.0.1"},
+         {port, 5432},
+         {username, "cloudi_tests"},
+         {password, "cloudi_tests"},
+         {database, "cloudi_tests"},
+         {timeout, 30000}, % milliseconds
+         {debug, true}],
+        none,
+        5000, 5000, 5000, undefined, undefined, 1, 5, 300, []};
+db_service(riak) ->
+    {internal,
+        "/oauth_db/cloudi_tests/",
+        cloudi_service_db_riak,
+        [{debug, true}],
+        none,
+        5000, 5000, 5000, undefined, undefined, 1, 5, 300, []}.
+
 token_data(Response) ->
     [<<"oauth_token=", Token/binary>>,
      <<"oauth_token_secret=", TokenSecret/binary>> |
@@ -547,19 +554,39 @@ location_verifier(Location, Callback, TokenRequest) ->
      <<"oauth_verifier=", Verifier/binary>>] = binary:split(Location, <<"&">>),
     Verifier.
 
-test_condition(L) ->
-    case gen_tcp:connect(?DEFAULT_PGSQL_HOST, ?DEFAULT_PGSQL_PORT, []) of
+test_conditions_merge([], Output) ->
+    lists:reverse(Output);
+test_conditions_merge([{skip, _} | L], Output) ->
+    test_conditions_merge(L, Output);
+test_conditions_merge([Group | L], Output) ->
+    test_conditions_merge(L, [Group | Output]).
+
+test_conditions_merge(L) ->
+    case test_conditions_merge(L, []) of
+        [] ->
+            {skip, L};
+        [_ | _] = NewL ->
+            NewL
+    end.
+
+test_condition(L, Host, Port, ErrorReason) ->
+    case gen_tcp:connect(Host, Port, []) of
         {ok, Socket} ->
             catch gen_tcp:close(Socket),
             L;
         {error, econnrefused} ->
             error_logger:error_msg("unable to test ~p",
-                                   [{?DEFAULT_PGSQL_HOST,
-                                     ?DEFAULT_PGSQL_PORT}]),
-            {skip, pgsql_dead};
+                                   [{Host, Port}]),
+            {skip, ErrorReason};
         {error, Reason} ->
             error_logger:error_msg("unable to test ~p: ~p",
-                                   [{?DEFAULT_PGSQL_HOST,
-                                     ?DEFAULT_PGSQL_PORT}, Reason]),
-            {skip, pgsql_dead}
+                                   [{Host, Port}, Reason]),
+            {skip, ErrorReason}
     end.
+
+test_condition_pgsql(L) ->
+    test_condition(L, ?DEFAULT_PGSQL_HOST, ?DEFAULT_PGSQL_PORT, pgsql_dead).
+
+test_condition_riak(L) ->
+    test_condition(L, ?DEFAULT_RIAK_HOST, ?DEFAULT_RIAK_PORT, riak_dead).
+
