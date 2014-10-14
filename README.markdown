@@ -1,6 +1,8 @@
 `cloudi_service_oauth1`
 =======================
 
+[![Build Status](https://secure.travis-ci.org/CloudI/cloudi_service_oauth1.png?branch=master)](http://travis-ci.org/CloudI/cloudi_service_oauth1)
+
 OAuth v1.0 support as a CloudI service
 
 Usage

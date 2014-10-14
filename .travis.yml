@@ -1,0 +1,22 @@
+language: erlang
+otp_release:
+  - R16B03-1
+  - R16B
+services:
+  - riak
+before_script:
+  - psql -U postgres -c "CREATE DATABASE cloudi_tests;"
+  - psql -U postgres -c "CREATE USER cloudi_tests WITH PASSWORD 'cloudi_tests'; GRANT ALL PRIVILEGES ON DATABASE cloudi_tests to cloudi_tests;"
+  - rebar get-deps
+script: rebar compile ct suites=cloudi_service_oauth1 || ( cat logs/raw.log logs/ct_run*/cloudi.log && exit 1 )
+after_script:
+  - rebar clean
+branches:
+  only:
+    - master
+notifications:
+  irc:
+    channels:
+      - "chat.freenode.net#cloudi"
+    on_success: change
+    on_failure: always
