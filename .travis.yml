@@ -1,9 +1,7 @@
 language: erlang
 otp_release:
-  - R16B03-1
-  - R16B
-services:
-  - riak
+  - 18.2.1
+  - 17.5
 before_script:
   - psql -U postgres -c "CREATE DATABASE cloudi_tests;"
   - psql -U postgres -c "CREATE USER cloudi_tests WITH PASSWORD 'cloudi_tests'; GRANT ALL PRIVILEGES ON DATABASE cloudi_tests to cloudi_tests;"
