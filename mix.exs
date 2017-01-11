@@ -3,19 +3,19 @@ defmodule CloudIServiceOauth1 do
 
   def project do
     [app: :cloudi_service_oauth1,
-     version: "1.5.4",
+     version: "1.6.0",
      language: :erlang,
-     description: description,
-     package: package,
-     deps: deps]
+     description: description(),
+     package: package(),
+     deps: deps()]
   end
 
   defp deps do
     [# TODO, add cloudi_service_db_pgsql dependencies
-     {:cloudi_service_db_pgsql, "~> 1.5.4"},
+     {:cloudi_service_db_pgsql, "~> 1.6.0"},
      {:cowlib, "~> 1.0.0"},
      {:jsx, "~> 2.8.0"},
-     {:cloudi_core, "~> 1.5.4"}]
+     {:cloudi_core, "~> 1.6.0"}]
   end
 
   defp description do
