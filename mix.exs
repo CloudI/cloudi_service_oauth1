@@ -13,8 +13,18 @@ defmodule CloudIServiceOauth1 do
      deps: deps()]
   end
 
+  def application do
+    [applications: [
+       :cloudi_core,
+       :cowlib,
+       :jsx,
+       :crypto,
+       :public_key,
+       :inets]]
+  end
+
   defp deps do
-    [# TODO, add cloudi_service_db_pgsql dependencies
+    [
      {:cloudi_service_db_pgsql, "~> 1.7.3"},
      {:cowlib, "~> 1.0.0"},
      {:jsx, "~> 2.8.0"},
