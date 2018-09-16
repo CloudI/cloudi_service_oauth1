@@ -6,7 +6,7 @@ defmodule CloudIServiceOauth1 do
 
   def project do
     [app: :cloudi_service_oauth1,
-     version: "1.7.3",
+     version: "1.7.4",
      language: :erlang,
      erlc_options: [
        {:d, :erlang.list_to_atom('ERLANG_OTP_VERSION_' ++ :erlang.system_info(:otp_release))},
@@ -41,10 +41,10 @@ defmodule CloudIServiceOauth1 do
 
   defp deps do
     [
-     {:cloudi_service_db_pgsql, "~> 1.7.3"},
+     {:cloudi_service_db_pgsql, "~> 1.7.4"},
      {:cowlib, "~> 1.0.0"},
      {:jsx, "~> 2.8.0"},
-     {:cloudi_core, "~> 1.7.3"}]
+     {:cloudi_core, "~> 1.7.4"}]
   end
 
   defp description do
