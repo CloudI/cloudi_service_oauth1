@@ -6,7 +6,7 @@ defmodule CloudIServiceOauth1 do
 
   def project do
     [app: :cloudi_service_oauth1,
-     version: "1.7.4",
+     version: "1.7.5",
      language: :erlang,
      erlc_options: [
        {:d, :erlang.list_to_atom('ERLANG_OTP_VERSION_' ++ :erlang.system_info(:otp_release))},
@@ -40,11 +40,10 @@ defmodule CloudIServiceOauth1 do
   end
 
   defp deps do
-    [
-     {:cloudi_service_db_pgsql, "~> 1.7.4"},
-     {:cowlib, "~> 1.0.0"},
-     {:jsx, "~> 2.8.0"},
-     {:cloudi_core, "~> 1.7.4"}]
+    [{:cloudi_service_db_pgsql, "~> 1.7.5"},
+     {:cowlib, "~> 1.0.2"},
+     {:jsx, "~> 2.8.3"},
+     {:cloudi_core, "~> 1.7.5"}]
   end
 
   defp description do
@@ -52,7 +51,7 @@ defmodule CloudIServiceOauth1 do
   end
 
   defp package do
-    [files: ~w(src doc rebar.config README.markdown LICENSE),
+    [files: ~w(src doc test rebar.config README.markdown LICENSE),
      maintainers: ["Michael Truog"],
      licenses: ["MIT"],
      links: %{"Website" => "https://cloudi.org",
