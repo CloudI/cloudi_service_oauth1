@@ -4,7 +4,7 @@
 %%%------------------------------------------------------------------------
 %%% @doc
 %%% ==CloudI OAuth v1.0 Parsing==
-%%% based on https://github.com/extend/cowboy
+%%% based on https://github.com/ninenines/cowboy
 %%% @end
 %%%
 %%% MIT LICENSE
@@ -41,7 +41,7 @@ authorization(Binary) ->
     nonempty_list(Binary, fun authorization_tokens_param/2).
 
 %%%------------------------------------------------------------------------
-%%% From cowboy, in cowboy_http.erl
+%%% From cowboy1, in cowboy_http.erl
 %%%------------------------------------------------------------------------
 
 -spec authorization_tokens_param(binary(), fun()) -> any().
